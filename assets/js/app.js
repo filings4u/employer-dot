@@ -162,6 +162,7 @@ async function employerData(p){
   if(p==='support')return invoke('workforce-support',{action:'workspace'});
   if(p==='billing'){const ctpaCustomer=!!window.portalCtx?.customer_ctpa;return ctpaCustomer?invoke('workforce-employer-management',{action:'invoices'}):invoke('workforce-invoice-portal',{action:'list'});}
   if(p==='branding')return invoke('workforce-employer-management',{action:'branding'});
+  if(p==='consents')return invoke('workforce-employer-management',{action:'consent_workspace'});
   if(p==='order-services'&&isCtpaCustomer(window.portalCtx))return invoke('workforce-employer-management',{action:'service_catalog'});
   const map={dashboard:'overview',company:'settings',people:'overview',programs:'overview',pools:'overview',selections:'selection_history',compliance:'compliance_detail',reports:'reports',team:'members','post-accident':'overview'};
   return invoke('workforce-employer-management',{action:map[p]||'overview'});
@@ -363,6 +364,7 @@ async function render(ctx){
     else if(p==='billing'&&window.EmployerBilling){setSubtitle(isCtpaCustomer(ctx)?`View invoices issued to your company by ${ctpaName(ctx)}.`:'View, download, and pay invoices issued to your company by screenings4u.');html=window.EmployerBilling.render(d,ctx);}
     else if(p==='branding'&&window.EmployerBranding){setSubtitle('Customize the DOT Employee / Driver portal with your company logo and colors.');html=window.EmployerBranding.render(d,ctx);}
     else if(p==='notifications'&&window.EmployerNotifications){setSubtitle(isCtpaCustomer(ctx)?`Review notifications and communicate with ${ctpaName(ctx)}.`:'Review screenings4u notifications and reply to platform messages.');html=window.EmployerNotifications.render(d,ctx);}
+    else if(p==='consents'&&window.EmployerConsents){setSubtitle('Create, edit, send, and track DOT agency-specific consent forms and acknowledgments for your covered employees.');html=window.EmployerConsents.render(d,ctx);}
     else if(p==='company'){html=profileView(d)+(isCtpaCustomer(ctx)?`<div class="section notice"><strong>${esc(ctpaName(ctx))} manages this DOT program.</strong> You can add and edit drivers/employees, request tests, upload documents, reply to messages, review invoices, and create support requests from your customer portal.</div>`:(!d.employer?.applicable_dot_agency?`<div class="section notice"><strong>DOT agency setup required.</strong> Choose FMCSA, FAA, FRA, FTA, PHMSA, or USCG before creating regulated DOT activity.</div>`:''));}
     else if(p==='reports')html=`<div class="metrics">${metric('Testing',(d.testing||d.testing_orders||[]).length)}${metric('Programs',(d.program_enrollment||d.programs||[]).length)}${metric('Pools',(d.pool_membership||d.pools||[]).length)}${metric('Compliance',(d.compliance||d.cases||[]).length)}</div>`;
     else if(p==='post-accident')html=`<div class="notice">Post-accident activity is managed through Testing and Compliance. DOT service purchases are available from Order Services.</div><div class="section">${table('Post-Accident Testing',(d.testing_orders||[]).filter(x=>norm(x.reason)==='post_accident'),COLS.testing)}</div>`;
@@ -376,6 +378,7 @@ async function render(ctx){
   if(p==='support'&&window.EmployerSupport)window.EmployerSupport.bind(d,ctx);
   if(p==='billing'&&window.EmployerBilling)window.EmployerBilling.bind(d,ctx);
   if(p==='branding'&&window.EmployerBranding)window.EmployerBranding.bind(d,ctx);
+  if(p==='consents'&&window.EmployerConsents)window.EmployerConsents.bind(d,ctx);
   if(p==='order-services'&&isCtpaCustomer(ctx))bindCtpaServices(d);
 }
 
