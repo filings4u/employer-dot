@@ -335,7 +335,7 @@ body[data-portal-page="support"] .section{margin-top:18px}.support-shell{display
   .report-metrics{grid-template-columns:1fr!important}
 }
 
-/* Employer DOT: sponsored portal branding inherits an eligible C/TPA brand. */
+/* Employer DOT: C/TPA customer portal branding inherits an eligible C/TPA brand. */
 body[data-white-label="true"] .brand{background:#fff}
 body[data-white-label="true"] .hero{background:linear-gradient(120deg,var(--navy2),var(--navy) 70%,var(--blue))}
 body[data-white-label="true"] .hero:after{border-color:rgba(255,255,255,.12)}
@@ -350,7 +350,7 @@ body[data-white-label="true"] .pill{color:var(--blue);background:#edf3fb}
 .profile-metrics .metric{min-width:0}
 @media(max-width:820px){.profile-metrics .metric strong{font-size:16px}}
 
-/* Employer DOT sponsored-customer polish: compact spacing, full worker form, and persistent active nav. */
+/* Employer DOT C/TPA-customer polish: compact spacing, full worker form, and persistent active nav. */
 .nav a.active,.mobile-nav-links a.active{font-weight:850}
 .modal.modal-wide{width:min(980px,100%);max-height:min(88vh,920px);overflow:auto}
 .modal.modal-wide .modal-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
@@ -374,7 +374,7 @@ body[data-portal-page="order_services"] .service-grid{margin-top:12px}
 @media(max-width:560px){.modal.modal-wide .modal-grid{grid-template-columns:1fr}.modal.modal-wide{max-height:92vh}.notification-head-actions{align-items:stretch;flex-direction:column}.notification-head-actions .btn{width:100%}}
 
 
-/* Employer DOT people editor + compact sponsored pool spacing. */
+/* Employer DOT people editor + compact C/TPA customer pool spacing. */
 .people-panel .worker-actions{width:92px;white-space:nowrap}
 .people-panel td strong{color:var(--ink)}
 body[data-portal-page="pools"] .notice{padding:9px 13px;margin-bottom:0;line-height:1.4}
@@ -393,3 +393,17 @@ body[data-portal-page="pools"] .table-wrap td{padding-top:8px;padding-bottom:8px
 body[data-portal-page="pools"] .table-wrap .empty{padding:10px 6px}
 body[data-portal-page="pools"] .table-wrap tbody tr:only-child td:has(.empty){padding-top:0;padding-bottom:0}
 @media(max-width:820px){body[data-portal-page="pools"] .metric{padding:10px 12px}.people-panel .worker-actions{width:auto}}
+
+/* Employer DOT pools: consistent breathing room between customer-facing blocks. */
+body[data-portal-page="pools"] #content{display:block}
+body[data-portal-page="pools"] #content>.notice{margin:0 0 12px!important;padding:10px 14px!important;line-height:1.5}
+body[data-portal-page="pools"] #content>.metrics{margin:0 0 12px!important;gap:10px}
+body[data-portal-page="pools"] #content>.pool-layout{margin:0!important;gap:12px!important}
+body[data-portal-page="pools"] .metric{padding:12px 14px!important}
+body[data-portal-page="pools"] .pool-layout>.panel+.panel{margin-top:0}
+body[data-portal-page="pools"] .panel-head{padding:11px 15px!important}
+body[data-portal-page="pools"] .pool-cards{padding:12px 15px!important}
+body[data-portal-page="pools"] .pool-cards>.empty{padding:14px 4px!important;text-align:left}
+body[data-portal-page="pools"] .table-wrap td{padding-top:10px!important;padding-bottom:10px!important}
+body[data-portal-page="pools"] .table-wrap .empty{padding:14px 6px!important}
+@media(max-width:820px){body[data-portal-page="pools"] #content>.notice,body[data-portal-page="pools"] #content>.metrics{margin-bottom:10px!important}body[data-portal-page="pools"] #content>.pool-layout{gap:10px!important}}

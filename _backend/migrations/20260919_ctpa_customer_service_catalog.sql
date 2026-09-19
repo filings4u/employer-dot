@@ -1,5 +1,5 @@
 -- Live migration applied to workforce Supabase project wyezpseboxbmkedvbmyx.
--- Adds Admin-controlled DOT C/TPA service availability and sponsored Employer service requests.
+-- Adds Admin-controlled DOT C/TPA service availability and Employer customer service requests.
 -- Canonical tables: dot_ctpa_service_catalog, ctpa_customer_service_orders.
 -- Admin controls: enabled_for_ctpas, enabled_for_ctpa_customers, active, sort_order.
 -- See deployed workforce-employer-management v21 and workforce-admin-ctpa-operations v11.

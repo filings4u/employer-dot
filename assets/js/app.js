@@ -44,16 +44,16 @@ async function invoke(name,body={}){
 async function access(){const b={requested_portal_code:C.portalCode,requested_page:page()};if(stored())b.membership_id=stored();return invoke('workforce-session-context',b)}
 function darkenHex(hex,amount=.22){const m=/^#([0-9a-f]{6})$/i.exec(String(hex||''));if(!m)return'#0b2747';const n=parseInt(m[1],16),f=1-amount,r=Math.max(0,Math.round(((n>>16)&255)*f)),g=Math.max(0,Math.round(((n>>8)&255)*f)),b=Math.max(0,Math.round((n&255)*f));return'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function setBrandLogo(src,alt){const logo=document.querySelector('.brand img');if(!logo)return;const fallback='/assets/img/logo.png';logo.classList.remove('brand-logo-ready');logo.alt=alt||C.label;logo.onload=()=>logo.classList.add('brand-logo-ready');logo.onerror=()=>{if(logo.dataset.fallback==='1'){logo.classList.add('brand-logo-ready');return}logo.dataset.fallback='1';logo.alt=C.label;logo.src=fallback};logo.dataset.fallback=src===fallback?'1':'0';logo.src=src||fallback;if(logo.complete&&logo.naturalWidth)logo.classList.add('brand-logo-ready')}
-function applyBranding(b,ctx){if(!b)return;const primary=/^#[0-9a-f]{6}$/i.test(b.primary_color||'')?b.primary_color:'#24467f',accent=/^#[0-9a-f]{6}$/i.test(b.accent_color||'')?b.accent_color:'#ff6b00',name=b.portal_name||ctx?.subscription?.plan_name||C.label,root=document.documentElement;root.style.setProperty('--navy',primary);root.style.setProperty('--navy2',darkenHex(primary,.3));root.style.setProperty('--blue',primary);root.style.setProperty('--orange',accent);document.body.dataset.whiteLabel='true';const navTitle=document.querySelector('.nav-title');if(navTitle)navTitle.textContent=name;const crumb=document.querySelector('.crumb');if(crumb)crumb.textContent=`${name} / ${cfgPage(page()).label}`;const kicker=document.querySelector('.hero-kicker');if(kicker)kicker.textContent=name;const foot=document.querySelector('.side-foot div:last-child');if(foot)foot.textContent='Employer Portal';document.title=`${cfgPage(page()).label} | ${name}`;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',primary)}
-function applyPlatformBranding(ctx){const root=document.documentElement;for(const k of ['--navy','--navy2','--blue','--orange'])root.style.removeProperty(k);delete document.body.dataset.whiteLabel;const plan=ctx?.subscription?.plan_name||C.label,navTitle=document.querySelector('.nav-title');if(navTitle)navTitle.textContent=plan;const crumb=document.querySelector('.crumb');if(crumb)crumb.textContent=`${plan} / ${cfgPage(page()).label}`;const kicker=document.querySelector('.hero-kicker');if(kicker)kicker.textContent=plan;document.title=`${cfgPage(page()).label} | ${plan}`;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content','#102f55')}
+function applyBranding(b,ctx){if(!b)return;const primary=/^#[0-9a-f]{6}$/i.test(b.primary_color||'')?b.primary_color:'#24467f',accent=/^#[0-9a-f]{6}$/i.test(b.accent_color||'')?b.accent_color:'#ff6b00',name=isCtpaCustomer(ctx)?ctpaName(ctx):(b.portal_name||ctx?.subscription?.plan_name||C.label),root=document.documentElement;root.style.setProperty('--navy',primary);root.style.setProperty('--navy2',darkenHex(primary,.3));root.style.setProperty('--blue',primary);root.style.setProperty('--orange',accent);document.body.dataset.whiteLabel='true';const navTitle=document.querySelector('.nav-title');if(navTitle)navTitle.textContent=name;const crumb=document.querySelector('.crumb');if(crumb)crumb.textContent=`${name} / ${cfgPage(page()).label}`;const kicker=document.querySelector('.hero-kicker');if(kicker)kicker.textContent=name;const foot=document.querySelector('.side-foot div:last-child');if(foot)foot.textContent='Employer Portal';document.title=`${cfgPage(page()).label} | ${name}`;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',primary)}
+function applyPlatformBranding(ctx){const root=document.documentElement;for(const k of ['--navy','--navy2','--blue','--orange'])root.style.removeProperty(k);delete document.body.dataset.whiteLabel;const plan=isCtpaCustomer(ctx)?ctpaName(ctx):(ctx?.subscription?.plan_name||C.label),navTitle=document.querySelector('.nav-title');if(navTitle)navTitle.textContent=plan;const crumb=document.querySelector('.crumb');if(crumb)crumb.textContent=`${plan} / ${cfgPage(page()).label}`;const kicker=document.querySelector('.hero-kicker');if(kicker)kicker.textContent=plan;document.title=`${cfgPage(page()).label} | ${plan}`;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content','#102f55')}
 async function fetchBranding(){return invoke('workforce-employer-management',{action:'branding'})}
-async function loadBranding(ctx,prefetched=null){let branding=null;try{const d=prefetched?await prefetched:await fetchBranding();branding=d?.branding||null;writeBrandCache(ctx?.membership?.id,branding);if(branding)applyBranding(branding,ctx);else applyPlatformBranding(ctx)}catch(e){console.warn('Employer branding unavailable',e);const cached=readBrandCache(ctx?.membership?.id);branding=cached?.branding||null;if(branding)applyBranding(branding,ctx)}const name=branding?.portal_name||ctx?.subscription?.plan_name||C.label;setBrandLogo(branding?.logo_path||'/assets/img/logo.png',name);return branding}
+async function loadBranding(ctx,prefetched=null){let branding=null;try{const d=prefetched?await prefetched:await fetchBranding();branding=d?.branding||null;writeBrandCache(ctx?.membership?.id,branding);if(branding)applyBranding(branding,ctx);else applyPlatformBranding(ctx)}catch(e){console.warn('Employer branding unavailable',e);const cached=readBrandCache(ctx?.membership?.id);branding=cached?.branding||null;if(branding)applyBranding(branding,ctx)}const name=isCtpaCustomer(ctx)?ctpaName(ctx):(branding?.portal_name||ctx?.subscription?.plan_name||C.label);setBrandLogo(branding?.logo_path||'/assets/img/logo.png',name);return branding}
 
 function shell(ctx){
   const current=page();
   document.body.dataset.portalPage=norm(current);
   NAV=Array.isArray(ctx?.navigation)?ctx.navigation:[];
-  const planLabel=ctx?.subscription?.plan_name||C.label;
+  const planLabel=isCtpaCustomer(ctx)?ctpaName(ctx):(ctx?.subscription?.plan_name||C.label);
   const links=NAV.map(x=>`<a href="${esc(x.href||('/'+x.id+'.html'))}" class="${norm(current)===norm(x.id)?'active':''}"${norm(current)===norm(x.id)?' aria-current="page"':''}><span class="ico">${esc(x.icon||'•')}</span><span>${esc(x.label||pretty(x.id))}</span></a>`).join('');
   document.title=`${cfgPage(current).label} | ${planLabel}`;
   document.body.className='loading';
@@ -160,9 +160,9 @@ async function employerData(p){
   if(p==='results')return invoke('workforce-employer-results',{action:'workspace'}).catch(()=>invoke('workforce-employer-management',{action:'results'}));
   if(p==='notifications')return invoke('workforce-employer-notifications',{action:'workspace'}).catch(()=>invoke('workforce-employer-management',{action:'notifications'}));
   if(p==='support')return invoke('workforce-support',{action:'workspace'});
-  if(p==='billing'){const sponsored=window.portalCtx?.subscription?.plan_code==='dot_employer_ctpa_sponsored';return sponsored?invoke('workforce-employer-management',{action:'invoices'}):invoke('workforce-invoice-portal',{action:'list'});}
+  if(p==='billing'){const ctpaCustomer=!!window.portalCtx?.customer_ctpa;return ctpaCustomer?invoke('workforce-employer-management',{action:'invoices'}):invoke('workforce-invoice-portal',{action:'list'});}
   if(p==='branding')return invoke('workforce-employer-management',{action:'branding'});
-  if(p==='order-services'&&isSponsored(window.portalCtx))return invoke('workforce-employer-management',{action:'service_catalog'});
+  if(p==='order-services'&&isCtpaCustomer(window.portalCtx))return invoke('workforce-employer-management',{action:'service_catalog'});
   const map={dashboard:'overview',company:'settings',people:'overview',programs:'overview',pools:'overview',selections:'selection_history',compliance:'compliance_detail',reports:'reports',team:'members','post-accident':'overview'};
   return invoke('workforce-employer-management',{action:map[p]||'overview'});
 }
@@ -237,11 +237,12 @@ function wireSelfActions(p,d,ctx){
   }
   if(p==='credentials')addAction('Submit Credential',()=>modal('Submit Credential',[{name:'credential_type',label:'Credential type',required:true},{name:'credential_number',label:'Credential number'},{name:'issuing_state',label:'Issuing state'},{name:'expires_at',label:'Expiration date',type:'date'}],async v=>invoke('workforce-employee-portal',{action:'save_credential',membership_id:stored(),credential:v})));
 }
-function isSponsored(ctx=window.portalCtx){return ctx?.subscription?.plan_code==='dot_employer_ctpa_sponsored'}
-function selfManaged(ctx=window.portalCtx){return !isSponsored(ctx)}
+function isCtpaCustomer(ctx=window.portalCtx){return !!ctx?.customer_ctpa}
+function ctpaName(ctx=window.portalCtx){return ctx?.customer_ctpa?.display_name||ctx?.customer_ctpa?.dba_name||ctx?.customer_ctpa?.legal_name||'Your C/TPA'}
+function selfManaged(ctx=window.portalCtx){return !isCtpaCustomer(ctx)}
 function wireManagementActions(p,d,ctx){
-  const sponsored=C.kind==='employer'&&isSponsored(ctx);
-  if(C.kind==='employer'&&p==='company'&&!sponsored){
+  const ctpaCustomer=C.kind==='employer'&&isCtpaCustomer(ctx);
+  if(C.kind==='employer'&&p==='company'&&!ctpaCustomer){
     const e=d.employer||{};
     addAction('Edit Company Contact',()=>modal('Edit Company Contact',[{name:'phone',label:'Phone',value:e.phone||''},{name:'website',label:'Website',value:e.website||''},{name:'primary_contact_name',label:'Primary contact',value:e.primary_contact_name||''},{name:'primary_contact_email',label:'Primary contact email',type:'email',value:e.primary_contact_email||''},{name:'billing_contact_name',label:'Billing contact',value:e.billing_contact_name||''},{name:'billing_contact_email',label:'Billing contact email',type:'email',value:e.billing_contact_email||''}],async v=>invoke('workforce-employer-management',{action:'save_settings',settings:v})));
     addAction(e.applicable_dot_agency?'Update DOT Agency':'Set DOT Agency',()=>modal('DOT Agency Affiliation',[{name:'agency_code',label:'DOT Agency',type:'select',required:true,value:e.applicable_dot_agency||'FMCSA',options:['FMCSA','FAA','FRA','FTA','PHMSA','USCG'].map(x=>({value:x,label:x}))},{name:'account_identifier',label:'Agency account / identifier'},{name:'employee_category',label:'Regulated category',value:'general'},{name:'effective_date',label:'Effective date',type:'date',value:new Date().toISOString().slice(0,10)}],async v=>invoke('workforce-employer-management',{action:'save_agency_registration',agency_code:v.agency_code,registration:{...v,is_primary:true,status:'active'}})),true);
@@ -262,8 +263,8 @@ function wireManagementActions(p,d,ctx){
       return invoke('workforce-employer-management',{action:'save_employee',employee:{...v,dot_covered:C.surface==='dot',employment_status:'active',safety_sensitive:C.surface==='dot'}});
     });
   });
-  if(C.kind==='employer'&&p==='people'&&!sponsored){addAction('Invite to Employee / Driver Portal',()=>{const people=(d.employees||[]).filter(x=>x.dot_covered!==false);modal('Invite Employee / Driver',[{name:'employee_id',label:'Employee / Driver',type:'select',required:true,options:people.map(x=>({value:x.id,label:[x.first_name,x.last_name].filter(Boolean).join(' ')||x.employee_number||x.id}))},{name:'email',label:'Portal email (leave blank to use employee email)',type:'email'}],async v=>invoke('workforce-employer-management',{action:'invite_employee',employee:{id:v.employee_id,email:v.email}}))},true);}
-  if(p==='programs'&&!(C.kind==='employer'&&sponsored))addAction('Add Program',()=>{
+  if(C.kind==='employer'&&p==='people'&&!ctpaCustomer){addAction('Invite to Employee / Driver Portal',()=>{const people=(d.employees||[]).filter(x=>x.dot_covered!==false);modal('Invite Employee / Driver',[{name:'employee_id',label:'Employee / Driver',type:'select',required:true,options:people.map(x=>({value:x.id,label:[x.first_name,x.last_name].filter(Boolean).join(' ')||x.employee_number||x.id}))},{name:'email',label:'Portal email (leave blank to use employee email)',type:'email'}],async v=>invoke('workforce-employer-management',{action:'invite_employee',employee:{id:v.employee_id,email:v.email}}))},true);}
+  if(p==='programs'&&!(C.kind==='employer'&&ctpaCustomer))addAction('Add Program',()=>{
     const fields=[];
     if(C.kind==='ctpa')fields.push({name:'employer_id',label:'Client Employer',type:'select',required:true,options:(d.employers||[]).map(x=>({value:x.id,label:x.legal_name||x.dba_name||x.id}))});
     fields.push({name:'name',label:'Program name',required:true},{name:'testing_method',label:'Testing method'},{name:'effective_date',label:'Effective date',type:'date',value:new Date().toISOString().slice(0,10)});
@@ -284,7 +285,7 @@ function wireManagementActions(p,d,ctx){
       return invoke('workforce-employer-testing',{action:'create',test:v});
     });
   });
-  if(p==='pools'&&!window.PortalPools&&!(C.kind==='employer'&&sponsored))addAction('Add Pool',()=>{
+  if(p==='pools'&&!window.PortalPools&&!(C.kind==='employer'&&ctpaCustomer))addAction('Add Pool',()=>{
     const fields=[];
     if(C.kind==='ctpa')fields.push({name:'employer_id',label:'Client Employer',type:'select',options:(d.employers||[]).map(x=>({value:x.id,label:x.legal_name||x.id}))});
     if(C.kind==='ctpa')fields.push({name:'name',label:'Pool name',required:true},{name:'pool_type',label:'Pool type',type:'select',value:'consortium',options:[{value:'consortium',label:'Consortium'}]},{name:'program_type',label:'Program type',type:'select',value:'DOT',options:[{value:'DOT',label:'DOT'}]});
@@ -297,8 +298,8 @@ function wireManagementActions(p,d,ctx){
   });
 }
 
-function sponsoredServiceRequestModal(d,service){
-  const seller=d?.seller?.legal_name||'Your C/TPA',employees=d?.employees||[],employer=d?.employer||{};
+function ctpaServiceRequestModal(d,service){
+  const seller=d?.seller?.legal_name||ctpaName(window.portalCtx),employees=d?.employees||[],employer=d?.employer||{};
   const fields=[
     {name:'employee_id',label:'Driver / employee',type:'select',options:[{value:'',label:'Company-level request'},...employees.map(x=>({value:x.id,label:[x.first_name,x.middle_name,x.last_name].filter(Boolean).join(' ')||x.employee_number||x.id}))]},
     {name:'contact_name',label:'Contact name',required:true,value:employer.primary_contact_name||''},
@@ -312,7 +313,7 @@ function sponsoredServiceRequestModal(d,service){
     alert(`Service request ${out.order?.order_number||''} was sent to ${seller}.`);
   });
 }
-function bindSponsoredServices(d){document.querySelectorAll('[data-ctpa-service]').forEach(b=>b.onclick=()=>{const service=(d.services||[]).find(x=>String(x.id)===String(b.dataset.ctpaService));if(service)sponsoredServiceRequestModal(d,service)})}
+function bindCtpaServices(d){document.querySelectorAll('[data-ctpa-service]').forEach(b=>b.onclick=()=>{const service=(d.services||[]).find(x=>String(x.id)===String(b.dataset.ctpaService));if(service)ctpaServiceRequestModal(d,service)})}
 async function render(ctx){
   $('#actions').innerHTML='';const p=page();let d;
   if(C.kind==='self')d=await selfData();else if(C.kind==='ctpa')d=await ctpaData(p);else d=dotScoped(await employerData(p));
@@ -323,10 +324,10 @@ async function render(ctx){
   if(p==='dashboard')html=dashboard(ctx,d);
   else if(p==='pools'&&window.PortalPools){setSubtitle(C.kind==='ctpa'?'Create consortium pools and manage eligible pool membership.':'Manage random pools and pool participation for this Employer.');html=window.PortalPools.render(d,ctx);}
   else if(p==='order-services'){
-    if(isSponsored(ctx)){
-      const seller=d?.seller?.legal_name||'Your C/TPA',cards=(d.services||[]).map(s=>`<article class="service"><span class="service-source">Available from ${esc(seller)}</span><h3>${esc(s.name)}</h3><p>${esc(s.description||s.category||'DOT service')}</p><div class="service-meta">${esc(s.category||'DOT Service')}</div><button class="btn primary" type="button" data-ctpa-service="${esc(s.id)}">Request from ${esc(seller)}</button></article>`).join('');
+    if(isCtpaCustomer(ctx)){
+      const seller=d?.seller?.legal_name||ctpaName(window.portalCtx),cards=(d.services||[]).map(s=>`<article class="service"><span class="service-source">Available from ${esc(seller)}</span><h3>${esc(s.name)}</h3><p>${esc(s.description||s.category||'DOT service')}</p><div class="service-meta">${esc(s.category||'DOT Service')}</div><button class="btn primary" type="button" data-ctpa-service="${esc(s.id)}">Request from ${esc(seller)}</button></article>`).join('');
       setSubtitle(`Request DOT services directly from ${seller}.`);
-      html=`<div class="notice ctpa-service-notice"><strong>${esc(seller)} is your service provider.</strong> Available services are controlled for the C/TPA network and requests from this page are sent directly to your sponsoring C/TPA.</div><div class="section service-grid">${cards||'<div class="panel service-empty"><div class="empty">No services are currently available from your C/TPA.</div></div>'}</div>`;
+      html=`<div class="notice ctpa-service-notice"><strong>${esc(seller)} is your service provider.</strong> Available services are provided by ${esc(seller)}. Requests from this page are sent directly to ${esc(seller)}.</div><div class="section service-grid">${cards||'<div class="panel service-empty"><div class="empty">No services are currently available from your C/TPA.</div></div>'}</div>`;
     }else{
       const cat=await serviceCatalog();
       const cards=(cat.services||[]).map(s=>{const href=(cat.seller?.checkout_base||'https://screenings4u.com/')+String(s.order_url||'');return `<article class="service"><h3>${esc(s.name)}</h3><p>${esc(s.description||s.category||'DOT service')}</p><div class="price">${s.amount==null?'Request quote':money(s.amount)}</div><div class="seller">Seller: ${esc(s.seller_legal_name||'screenings4u, LLC')}</div><a class="btn primary" href="${esc(href)}" target="_blank" rel="noopener">Order from screenings4u</a></article>`}).join('');
@@ -356,11 +357,11 @@ async function render(ctx){
     wireManagementActions(p,d,ctx);
   }
   else {
-    if(p==='support'&&window.EmployerSupport){setSubtitle(isSponsored(ctx)?'Get help from your managing C/TPA and track customer support requests.':'Get help from screenings4u, create support requests, and track ticket status.');html=window.EmployerSupport.render(d,ctx);}
-    else if(p==='billing'&&window.EmployerBilling){setSubtitle(isSponsored(ctx)?'View invoices issued to your company by your managing C/TPA.':'View, download, and pay invoices issued to your company by screenings4u.');html=window.EmployerBilling.render(d,ctx);}
+    if(p==='support'&&window.EmployerSupport){setSubtitle(isCtpaCustomer(ctx)?`Get help from ${ctpaName(ctx)} and track your support requests.`:'Get help from screenings4u, create support requests, and track ticket status.');html=window.EmployerSupport.render(d,ctx);}
+    else if(p==='billing'&&window.EmployerBilling){setSubtitle(isCtpaCustomer(ctx)?`View invoices issued to your company by ${ctpaName(ctx)}.`:'View, download, and pay invoices issued to your company by screenings4u.');html=window.EmployerBilling.render(d,ctx);}
     else if(p==='branding'&&window.EmployerBranding){setSubtitle('Customize the DOT Employee / Driver portal with your company logo and colors.');html=window.EmployerBranding.render(d,ctx);}
-    else if(p==='notifications'&&window.EmployerNotifications){setSubtitle(isSponsored(ctx)?'Review notifications and communicate with your sponsoring C/TPA.':'Review screenings4u notifications and reply to platform messages.');html=window.EmployerNotifications.render(d,ctx);}
-    else if(p==='company'){html=profileView(d)+(isSponsored(ctx)?`<div class="section notice"><strong>Managed by your C/TPA.</strong> Company program, pool, compliance, and administrative changes are controlled by your managing C/TPA. You can still add DOT employees/drivers, request tests, upload documents, reply to C/TPA messages, and create support requests.</div>`:(!d.employer?.applicable_dot_agency?`<div class="section notice"><strong>DOT agency setup required.</strong> Choose FMCSA, FAA, FRA, FTA, PHMSA, or USCG before creating regulated DOT activity.</div>`:''));}
+    else if(p==='notifications'&&window.EmployerNotifications){setSubtitle(isCtpaCustomer(ctx)?`Review notifications and communicate with ${ctpaName(ctx)}.`:'Review screenings4u notifications and reply to platform messages.');html=window.EmployerNotifications.render(d,ctx);}
+    else if(p==='company'){html=profileView(d)+(isCtpaCustomer(ctx)?`<div class="section notice"><strong>${esc(ctpaName(ctx))} manages this DOT program.</strong> You can add and edit drivers/employees, request tests, upload documents, reply to messages, review invoices, and create support requests from your customer portal.</div>`:(!d.employer?.applicable_dot_agency?`<div class="section notice"><strong>DOT agency setup required.</strong> Choose FMCSA, FAA, FRA, FTA, PHMSA, or USCG before creating regulated DOT activity.</div>`:''));}
     else if(p==='reports')html=`<div class="metrics">${metric('Testing',(d.testing||d.testing_orders||[]).length)}${metric('Programs',(d.program_enrollment||d.programs||[]).length)}${metric('Pools',(d.pool_membership||d.pools||[]).length)}${metric('Compliance',(d.compliance||d.cases||[]).length)}</div>`;
     else if(p==='post-accident')html=`<div class="notice">Post-accident activity is managed through Testing and Compliance. DOT service purchases are available from Order Services.</div><div class="section">${table('Post-Accident Testing',(d.testing_orders||[]).filter(x=>norm(x.reason)==='post_accident'),COLS.testing)}</div>`;
     else {const [rows,key]=pickManagementRows(p,d);html=p==='people'?employeeTable(cfgPage(p).label,rows):(key?table(cfgPage(p).label,rows,COLS[key]):`<div class="panel"><div class="empty">No records available.</div></div>`)}
@@ -373,7 +374,7 @@ async function render(ctx){
   if(p==='support'&&window.EmployerSupport)window.EmployerSupport.bind(d,ctx);
   if(p==='billing'&&window.EmployerBilling)window.EmployerBilling.bind(d,ctx);
   if(p==='branding'&&window.EmployerBranding)window.EmployerBranding.bind(d,ctx);
-  if(p==='order-services'&&isSponsored(ctx))bindSponsoredServices(d);
+  if(p==='order-services'&&isCtpaCustomer(ctx))bindCtpaServices(d);
 }
 
 async function init(){
