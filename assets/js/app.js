@@ -107,6 +107,30 @@ function table(title,rows,cols){
   const body=rows.length?rows.map(r=>`<tr>${cols.map(c=>`<td>${c[2]?c[2](read(r,c[1])):esc(read(r,c[1]))}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${cols.length}"><div class="empty">No records available.</div></td></tr>`;
   return `<div class="panel"><div class="panel-head"><div><h2>${esc(title)}</h2></div><span class="badge">${rows.length} record${rows.length===1?'':'s'}</span></div><div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c[0])}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
+function workerFields(d,x={}){
+  const fields=[
+    {name:'first_name',label:'First name',required:true,value:x.first_name||''},{name:'middle_name',label:'Middle name',value:x.middle_name||''},{name:'last_name',label:'Last name',required:true,value:x.last_name||''},
+    {name:'employee_number',label:'Employee / driver number',value:x.employee_number||''},{name:'date_of_birth',label:'Date of birth',type:'date',value:x.date_of_birth||''},{name:'hire_date',label:'Hire date',type:'date',value:x.hire_date||''},
+    {name:'email',label:'Email',type:'email',value:x.email||''},{name:'mobile',label:'Mobile phone',type:'tel',value:x.mobile||''},{name:'job_title',label:'Job title',value:x.job_title||''},
+    {name:'address_line1',label:'Address line 1',full:true,value:x.address_line1||''},{name:'address_line2',label:'Address line 2',full:true,value:x.address_line2||''},{name:'city',label:'City',value:x.city||''},{name:'state',label:'State',value:x.state||''},{name:'postal_code',label:'ZIP / postal code',value:x.postal_code||''},{name:'country',label:'Country',value:x.country||'US'},
+    {name:'cdl_number',label:'CDL number',value:x.cdl_number||''},{name:'cdl_state',label:'CDL state',value:x.cdl_state||''},
+    {name:'employment_status',label:'Employment status',type:'select',value:x.employment_status||'active',options:['active','leave','inactive','suspended','terminated'].map(v=>({value:v,label:pretty(v)}))}
+  ];
+  if((d.locations||[]).length)fields.push({name:'location_id',label:'Work location',type:'select',value:x.location_id||'',options:[{value:'',label:'No location assigned'},...(d.locations||[]).map(v=>({value:v.id,label:v.name||v.id}))]});
+  if(C.surface==='dot')fields.push({name:'dot_agency',label:'DOT Agency',type:'select',value:x.dot_agency||'FMCSA',options:['FMCSA','FAA','FRA','FTA','PHMSA','USCG'].map(v=>({value:v,label:v}))});
+  if(x.id&&x.termination_date)fields.push({name:'termination_date',label:'Termination date',type:'date',value:x.termination_date});
+  return fields;
+}
+function employeeTable(title,rows){
+  const body=rows.length?rows.map(r=>`<tr><td><strong>${esc([r.first_name,r.middle_name,r.last_name].filter(Boolean).join(' ')||r.display_name||'—')}</strong>${r.email?`<small>${esc(r.email)}</small>`:''}</td><td>${esc(r.employee_number||'—')}</td><td>${esc(r.job_title||'—')}</td><td>${esc(r.dot_agency||'—')}</td><td>${badgeCell(r.employment_status||'—')}</td><td class="worker-actions"><button class="mini-btn" type="button" data-edit-worker="${esc(r.id)}">Edit</button></td></tr>`).join(''):`<tr><td colspan="6"><div class="empty">No records available.</div></td></tr>`;
+  return `<div class="panel people-panel"><div class="panel-head"><div><h2>${esc(title)}</h2></div><span class="badge">${rows.length} record${rows.length===1?'':'s'}</span></div><div class="table-wrap"><table><thead><tr><th>Name</th><th>Employee #</th><th>Position</th><th>Agency</th><th>Status</th><th>Actions</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+}
+function bindWorkerEdits(d){
+  document.querySelectorAll('[data-edit-worker]').forEach(btn=>btn.onclick=()=>{
+    const worker=(d.employees||[]).find(x=>String(x.id)===String(btn.dataset.editWorker));if(!worker)return;
+    modal('Edit Driver / Employee',workerFields(d,worker),async v=>invoke('workforce-employer-management',{action:'save_employee',employee:{...v,id:worker.id,dot_covered:true,safety_sensitive:worker.safety_sensitive!==false}}));
+  });
+}
 function modal(title,fields,onSave){
   const b=document.createElement('div');b.className='modal-backdrop';
   const fieldHtml=fields.map(f=>{let input;if(f.type==='select')input=`<select name="${esc(f.name)}" ${f.required?'required':''}>${(f.options||[]).map(o=>`<option value="${esc(o.value)}" ${String(o.value)===String(f.value??'')?'selected':''}>${esc(o.label)}</option>`).join('')}</select>`;else if(f.type==='textarea')input=`<textarea name="${esc(f.name)}" rows="4" ${f.required?'required':''}>${esc(f.value||'')}</textarea>`;else input=`<input type="${esc(f.type||'text')}" name="${esc(f.name)}" value="${esc(f.value||'')}" ${f.required?'required':''}>`;return `<div class="field ${f.full?'full':''}"><label>${esc(f.label)}</label>${input}</div>`}).join('');
@@ -232,17 +256,7 @@ function wireManagementActions(p,d,ctx){
     return;
   }
   if(p==='people')addAction(C.surface==='dot'?'Add Driver / Employee':'Add Employee',()=>{
-    const fields=[];
-    if(C.kind==='ctpa')fields.push({name:'employer_id',label:'Client Employer',type:'select',required:true,options:(d.employers||[]).map(x=>({value:x.id,label:x.legal_name||x.dba_name||x.id}))});
-    fields.push(
-      {name:'first_name',label:'First name',required:true},{name:'middle_name',label:'Middle name'},{name:'last_name',label:'Last name',required:true},
-      {name:'employee_number',label:'Employee / driver number'},{name:'date_of_birth',label:'Date of birth',type:'date'},{name:'hire_date',label:'Hire date',type:'date'},
-      {name:'email',label:'Email',type:'email'},{name:'mobile',label:'Mobile phone',type:'tel'},{name:'job_title',label:'Job title'},
-      {name:'address_line1',label:'Address line 1',full:true},{name:'address_line2',label:'Address line 2',full:true},{name:'city',label:'City'},{name:'state',label:'State'},{name:'postal_code',label:'ZIP / postal code'},{name:'country',label:'Country',value:'US'},
-      {name:'cdl_number',label:'CDL number'},{name:'cdl_state',label:'CDL state'},{name:'employment_status',label:'Employment status',type:'select',value:'active',options:['active','leave','inactive'].map(x=>({value:x,label:pretty(x)}))}
-    );
-    if((d.locations||[]).length)fields.push({name:'location_id',label:'Work location',type:'select',options:[{value:'',label:'No location assigned'},...(d.locations||[]).map(x=>({value:x.id,label:x.name||x.id}))]});
-    if(C.surface==='dot')fields.push({name:'dot_agency',label:'DOT Agency',type:'select',value:'FMCSA',options:['FMCSA','FAA','FRA','FTA','PHMSA','USCG'].map(x=>({value:x,label:x}))});
+    const fields=C.kind==='ctpa'?[{name:'employer_id',label:'Client Employer',type:'select',required:true,options:(d.employers||[]).map(x=>({value:x.id,label:x.legal_name||x.dba_name||x.id}))},...workerFields(d,{})]:workerFields(d,{});
     modal('Add Driver / Employee',fields,async v=>{
       if(C.kind==='ctpa')return invoke('workforce-ctpa-employees-programs',{action:'save_employee',employee:{...v,dot_covered:C.surface==='dot',employment_status:'active',safety_sensitive:C.surface==='dot'}});
       return invoke('workforce-employer-management',{action:'save_employee',employee:{...v,dot_covered:C.surface==='dot',employment_status:'active',safety_sensitive:C.surface==='dot'}});
@@ -349,10 +363,11 @@ async function render(ctx){
     else if(p==='company'){html=profileView(d)+(isSponsored(ctx)?`<div class="section notice"><strong>Managed by your C/TPA.</strong> Company program, pool, compliance, and administrative changes are controlled by your managing C/TPA. You can still add DOT employees/drivers, request tests, upload documents, reply to C/TPA messages, and create support requests.</div>`:(!d.employer?.applicable_dot_agency?`<div class="section notice"><strong>DOT agency setup required.</strong> Choose FMCSA, FAA, FRA, FTA, PHMSA, or USCG before creating regulated DOT activity.</div>`:''));}
     else if(p==='reports')html=`<div class="metrics">${metric('Testing',(d.testing||d.testing_orders||[]).length)}${metric('Programs',(d.program_enrollment||d.programs||[]).length)}${metric('Pools',(d.pool_membership||d.pools||[]).length)}${metric('Compliance',(d.compliance||d.cases||[]).length)}</div>`;
     else if(p==='post-accident')html=`<div class="notice">Post-accident activity is managed through Testing and Compliance. DOT service purchases are available from Order Services.</div><div class="section">${table('Post-Accident Testing',(d.testing_orders||[]).filter(x=>norm(x.reason)==='post_accident'),COLS.testing)}</div>`;
-    else {const [rows,key]=pickManagementRows(p,d);html=key?table(cfgPage(p).label,rows,COLS[key]):`<div class="panel"><div class="empty">No records available.</div></div>`}
+    else {const [rows,key]=pickManagementRows(p,d);html=p==='people'?employeeTable(cfgPage(p).label,rows):(key?table(cfgPage(p).label,rows,COLS[key]):`<div class="panel"><div class="empty">No records available.</div></div>`)}
     wireManagementActions(p,d,ctx);
   }
   $('#content').innerHTML=html||`<div class="panel"><div class="empty">No data available.</div></div>`;
+  if(p==='people'&&C.kind==='employer')bindWorkerEdits(d);
   if(p==='pools'&&window.PortalPools)window.PortalPools.bind(d,ctx);
   if(p==='notifications'&&window.EmployerNotifications)window.EmployerNotifications.bind(d,ctx);
   if(p==='support'&&window.EmployerSupport)window.EmployerSupport.bind(d,ctx);
