@@ -11,6 +11,10 @@ const statusClass=v=>/active|complete|completed|paid|eligible|final|negative|ack
 const badge=v=>`<span class="badge ${statusClass(v)}">${esc(pretty(v))}</span>`;
 const page=()=>location.pathname.split('/').pop()?.replace('.html','')||'dashboard';
 const storageKey=()=>`s4u_${C.portalCode}_membership`;
+const brandCacheKey=id=>`s4u_${C.portalCode}_branding_${id||'default'}`;
+function readBrandCache(id){if(!id)return null;try{const x=JSON.parse(localStorage.getItem(brandCacheKey(id))||'null');if(!x||Date.now()-Number(x.saved_at||0)>1800000)return null;return x}catch{return null}}
+function writeBrandCache(id,branding){if(!id)return;try{localStorage.setItem(brandCacheKey(id),JSON.stringify({saved_at:Date.now(),branding:branding||null}))}catch{}}
+function primeBranding(b){if(!b)return;const primary=/^#[0-9a-f]{6}$/i.test(b.primary_color||'')?b.primary_color:'#24467f',accent=/^#[0-9a-f]{6}$/i.test(b.accent_color||'')?b.accent_color:'#ff6b00',root=document.documentElement;root.style.setProperty('--navy',primary);root.style.setProperty('--navy2',darkenHex(primary,.3));root.style.setProperty('--blue',primary);root.style.setProperty('--orange',accent)}
 const SUPPORT_CTX_KEY='s4u_support_context';
 function supportCtxRead(){try{return JSON.parse(sessionStorage.getItem(SUPPORT_CTX_KEY)||'{}')||{}}catch{return{}}}
 function supportCtxWrite(patch={}){try{sessionStorage.setItem(SUPPORT_CTX_KEY,JSON.stringify({...supportCtxRead(),...patch}))}catch{}}
@@ -29,7 +33,7 @@ const saveMid=v=>{if(v)localStorage.setItem(storageKey(),v)};
 let NAV=[];
 const cfgPage=id=>NAV.find(x=>norm(x.id)===norm(id))||{id,label:pretty(id),icon:'•',href:`/${id}.html`};
 
-async function getSession(){const {data:{session},error}=await sb.auth.getSession();if(error)throw error;return session}
+let activeSession=null;async function getSession(){if(activeSession&&(!activeSession.expires_at||activeSession.expires_at*1000-Date.now()>30000))return activeSession;const {data:{session},error}=await sb.auth.getSession();if(error)throw error;activeSession=session||null;return activeSession}
 async function invoke(name,body={}){
   const s=await getSession();if(!s)throw Object.assign(new Error('AUTH_REQUIRED'),{status:401});
   const r=await fetch(`${C.workforceUrl}/functions/v1/${name}`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${s.access_token}`,'apikey':C.workforceKey},body:JSON.stringify({portal_code:C.portalCode,membership_id:stored()||undefined,...body})});
@@ -41,16 +45,19 @@ async function access(){const b={requested_portal_code:C.portalCode,requested_pa
 function darkenHex(hex,amount=.22){const m=/^#([0-9a-f]{6})$/i.exec(String(hex||''));if(!m)return'#0b2747';const n=parseInt(m[1],16),f=1-amount,r=Math.max(0,Math.round(((n>>16)&255)*f)),g=Math.max(0,Math.round(((n>>8)&255)*f)),b=Math.max(0,Math.round((n&255)*f));return'#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function setBrandLogo(src,alt){const logo=document.querySelector('.brand img');if(!logo)return;const fallback='/assets/img/logo.png';logo.classList.remove('brand-logo-ready');logo.alt=alt||C.label;logo.onload=()=>logo.classList.add('brand-logo-ready');logo.onerror=()=>{if(logo.dataset.fallback==='1'){logo.classList.add('brand-logo-ready');return}logo.dataset.fallback='1';logo.alt=C.label;logo.src=fallback};logo.dataset.fallback=src===fallback?'1':'0';logo.src=src||fallback;if(logo.complete&&logo.naturalWidth)logo.classList.add('brand-logo-ready')}
 function applyBranding(b,ctx){if(!b)return;const primary=/^#[0-9a-f]{6}$/i.test(b.primary_color||'')?b.primary_color:'#24467f',accent=/^#[0-9a-f]{6}$/i.test(b.accent_color||'')?b.accent_color:'#ff6b00',name=b.portal_name||ctx?.subscription?.plan_name||C.label,root=document.documentElement;root.style.setProperty('--navy',primary);root.style.setProperty('--navy2',darkenHex(primary,.3));root.style.setProperty('--blue',primary);root.style.setProperty('--orange',accent);document.body.dataset.whiteLabel='true';const navTitle=document.querySelector('.nav-title');if(navTitle)navTitle.textContent=name;const crumb=document.querySelector('.crumb');if(crumb)crumb.textContent=`${name} / ${cfgPage(page()).label}`;const kicker=document.querySelector('.hero-kicker');if(kicker)kicker.textContent=name;const foot=document.querySelector('.side-foot div:last-child');if(foot)foot.textContent='Employer Portal';document.title=`${cfgPage(page()).label} | ${name}`;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',primary)}
-async function loadBranding(ctx){let branding=null;try{const d=await invoke('workforce-employer-management',{action:'branding'});branding=d?.branding||null;if(branding)applyBranding(branding,ctx)}catch(e){console.warn('Employer branding unavailable',e)}const name=branding?.portal_name||ctx?.subscription?.plan_name||C.label;setBrandLogo(branding?.logo_path||'/assets/img/logo.png',name)}
+function applyPlatformBranding(ctx){const root=document.documentElement;for(const k of ['--navy','--navy2','--blue','--orange'])root.style.removeProperty(k);delete document.body.dataset.whiteLabel;const plan=ctx?.subscription?.plan_name||C.label,navTitle=document.querySelector('.nav-title');if(navTitle)navTitle.textContent=plan;const crumb=document.querySelector('.crumb');if(crumb)crumb.textContent=`${plan} / ${cfgPage(page()).label}`;const kicker=document.querySelector('.hero-kicker');if(kicker)kicker.textContent=plan;document.title=`${cfgPage(page()).label} | ${plan}`;const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content','#102f55')}
+async function fetchBranding(){return invoke('workforce-employer-management',{action:'branding'})}
+async function loadBranding(ctx,prefetched=null){let branding=null;try{const d=prefetched?await prefetched:await fetchBranding();branding=d?.branding||null;writeBrandCache(ctx?.membership?.id,branding);if(branding)applyBranding(branding,ctx);else applyPlatformBranding(ctx)}catch(e){console.warn('Employer branding unavailable',e);const cached=readBrandCache(ctx?.membership?.id);branding=cached?.branding||null;if(branding)applyBranding(branding,ctx)}const name=branding?.portal_name||ctx?.subscription?.plan_name||C.label;setBrandLogo(branding?.logo_path||'/assets/img/logo.png',name);return branding}
 
 function shell(ctx){
   const current=page();
+  document.body.dataset.portalPage=norm(current);
   NAV=Array.isArray(ctx?.navigation)?ctx.navigation:[];
   const planLabel=ctx?.subscription?.plan_name||C.label;
-  const links=NAV.map(x=>`<a href="${esc(x.href||('/'+x.id+'.html'))}" class="${current===norm(x.id)?'active':''}"><span class="ico">${esc(x.icon||'•')}</span><span>${esc(x.label||pretty(x.id))}</span></a>`).join('');
+  const links=NAV.map(x=>`<a href="${esc(x.href||('/'+x.id+'.html'))}" class="${norm(current)===norm(x.id)?'active':''}"${norm(current)===norm(x.id)?' aria-current="page"':''}><span class="ico">${esc(x.icon||'•')}</span><span>${esc(x.label||pretty(x.id))}</span></a>`).join('');
   document.title=`${cfgPage(current).label} | ${planLabel}`;
   document.body.className='loading';
-  document.body.innerHTML=`<div class="app"><aside class="side" id="side"><div class="brand"><img class="brand-logo" alt="" aria-hidden="true"></div><nav class="nav"><div class="nav-title">${esc(planLabel)}</div>${links}</nav><div class="side-foot"><div style="font-size:9px;color:#9fb3c7">Portal</div><div style="font-size:11px;font-weight:800;color:#fff;margin-top:3px">${esc(C.domain)}</div></div></aside><main class="main"><header class="top"><div class="top-left"><button class="menu" id="menu" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="mobileNav"><span class="menu-bars" aria-hidden="true"><span></span><span></span><span></span></span></button><span class="crumb">${esc(planLabel)} / ${esc(cfgPage(current).label)}</span></div><div class="top-right"><span class="pill">${esc(C.kind==='self'?'Self Service':'Management')}</span>${C.agency?`<span class="pill">${esc(C.agency)}</span>`:''}<button class="top-support${current==='support'?' active':''}" id="supportShortcut" type="button"${current==='support'?' aria-current="page"':''}>Support</button><button class="signout" id="logout">Sign out</button></div></header><section class="mobile-nav" id="mobileNav" aria-hidden="true" aria-label="Portal navigation"><div class="mobile-nav-inner"><div class="mobile-nav-head"><div><span>Portal navigation</span><strong>${esc(planLabel)}</strong></div><span class="mobile-nav-current">${esc(cfgPage(current).label)}</span></div><nav class="mobile-nav-links">${links}</nav><div class="mobile-nav-foot"><span>${esc(C.domain)}</span><small>Select a page to close this menu.</small></div></div></section><div class="content"><div id="error"></div><section class="hero"><span class="hero-kicker">${esc(planLabel)}</span><h1>${esc(cfgPage(current).label)}</h1><p id="subtitle">Loading portal workspace.</p><div class="hero-actions" id="actions"></div></section><section class="section" id="content"><div class="panel"><div class="loading-msg">Loading…</div></div></section></div></main></div>`;
+  document.body.innerHTML=`<div class="app"><aside class="side" id="side"><div class="brand"><img class="brand-logo" alt="" aria-hidden="true"></div><nav class="nav"><div class="nav-title">${esc(planLabel)}</div>${links}</nav><div class="side-foot"><div style="font-size:9px;color:#9fb3c7">Portal</div><div style="font-size:11px;font-weight:800;color:#fff;margin-top:3px">${esc(C.domain)}</div></div></aside><main class="main"><header class="top"><div class="top-left"><button class="menu" id="menu" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="mobileNav"><span class="menu-bars" aria-hidden="true"><span></span><span></span><span></span></span></button><span class="crumb">${esc(planLabel)} / ${esc(cfgPage(current).label)}</span></div><div class="top-right"><span class="pill">${esc(C.kind==='self'?'Self Service':'Management')}</span>${C.agency?`<span class="pill">${esc(C.agency)}</span>`:''}<button class="top-support${norm(current)==='support'?' active':''}" id="supportShortcut" type="button"${norm(current)==='support'?' aria-current="page"':''}>Support</button><button class="signout" id="logout">Sign out</button></div></header><section class="mobile-nav" id="mobileNav" aria-hidden="true" aria-label="Portal navigation"><div class="mobile-nav-inner"><div class="mobile-nav-head"><div><span>Portal navigation</span><strong>${esc(planLabel)}</strong></div><span class="mobile-nav-current">${esc(cfgPage(current).label)}</span></div><nav class="mobile-nav-links">${links}</nav><div class="mobile-nav-foot"><span>${esc(C.domain)}</span><small>Select a page to close this menu.</small></div></div></section><div class="content"><div id="error"></div><section class="hero"><span class="hero-kicker">${esc(planLabel)}</span><h1>${esc(cfgPage(current).label)}</h1><p id="subtitle">Loading portal workspace.</p><div class="hero-actions" id="actions"></div></section><section class="section" id="content"><div class="panel"><div class="loading-msg">Loading…</div></div></section></div></main></div>`;
   const menuBtn=$('#menu'),mobileNav=$('#mobileNav');
   const setMobileNav=open=>{
     const isMobile=window.matchMedia('(max-width: 820px)').matches;
@@ -70,8 +77,8 @@ function shell(ctx){
   }
   const supportShortcut=$('#supportShortcut');
   if(supportShortcut)supportShortcut.onclick=()=>{
-    if(current!=='support')supportCtxWrite({page_url:location.href,page_title:document.title,page_id:current,captured_at:new Date().toISOString(),opened_from:'top_support'});
-    if(current!=='support')location.href='/support.html';
+    if(norm(current)!=='support')supportCtxWrite({page_url:location.href,page_title:document.title,page_id:current,captured_at:new Date().toISOString(),opened_from:'top_support'});
+    if(norm(current)!=='support')location.href='/support.html';
   };
   $('#logout').onclick=async()=>{await sb.auth.signOut();location.replace('/login.html')};
 }
@@ -102,8 +109,8 @@ function table(title,rows,cols){
 }
 function modal(title,fields,onSave){
   const b=document.createElement('div');b.className='modal-backdrop';
-  const fieldHtml=fields.map(f=>{const input=f.type==='select'?`<select name="${esc(f.name)}" ${f.required?'required':''}>${(f.options||[]).map(o=>`<option value="${esc(o.value)}" ${String(o.value)===String(f.value??'')?'selected':''}>${esc(o.label)}</option>`).join('')}</select>`:`<input type="${esc(f.type||'text')}" name="${esc(f.name)}" value="${esc(f.value||'')}" ${f.required?'required':''}>`;return `<div class="field ${f.full?'full':''}"><label>${esc(f.label)}</label>${input}</div>`}).join('');
-  b.innerHTML=`<form class="modal"><h2>${esc(title)}</h2><div class="modal-grid">${fieldHtml}</div><div class="modal-actions"><button type="button" class="btn ghost" data-cancel>Cancel</button><button type="submit" class="btn primary">Save</button></div></form>`;
+  const fieldHtml=fields.map(f=>{let input;if(f.type==='select')input=`<select name="${esc(f.name)}" ${f.required?'required':''}>${(f.options||[]).map(o=>`<option value="${esc(o.value)}" ${String(o.value)===String(f.value??'')?'selected':''}>${esc(o.label)}</option>`).join('')}</select>`;else if(f.type==='textarea')input=`<textarea name="${esc(f.name)}" rows="4" ${f.required?'required':''}>${esc(f.value||'')}</textarea>`;else input=`<input type="${esc(f.type||'text')}" name="${esc(f.name)}" value="${esc(f.value||'')}" ${f.required?'required':''}>`;return `<div class="field ${f.full?'full':''}"><label>${esc(f.label)}</label>${input}</div>`}).join('');
+  b.innerHTML=`<form class="modal${fields.length>=10?' modal-wide':''}"><h2>${esc(title)}</h2><div class="modal-grid">${fieldHtml}</div><div class="modal-actions"><button type="button" class="btn ghost" data-cancel>Cancel</button><button type="submit" class="btn primary">Save</button></div></form>`;
   document.body.appendChild(b);b.querySelector('[data-cancel]').onclick=()=>b.remove();
   b.querySelector('form').onsubmit=async e=>{e.preventDefault();try{const v=Object.fromEntries(new FormData(e.currentTarget).entries());await onSave(v);b.remove();await render(window.portalCtx)}catch(err){alert(err.message||String(err))}};
 }
@@ -131,6 +138,7 @@ async function employerData(p){
   if(p==='support')return invoke('workforce-support',{action:'workspace'});
   if(p==='billing'){const sponsored=window.portalCtx?.subscription?.plan_code==='dot_employer_ctpa_sponsored';return sponsored?invoke('workforce-employer-management',{action:'invoices'}):invoke('workforce-invoice-portal',{action:'list'});}
   if(p==='branding')return invoke('workforce-employer-management',{action:'branding'});
+  if(p==='order-services'&&isSponsored(window.portalCtx))return invoke('workforce-employer-management',{action:'service_catalog'});
   const map={dashboard:'overview',company:'settings',people:'overview',programs:'overview',pools:'overview',selections:'selection_history',compliance:'compliance_detail',reports:'reports',team:'members','post-accident':'overview'};
   return invoke('workforce-employer-management',{action:map[p]||'overview'});
 }
@@ -160,7 +168,7 @@ function dashboard(ctx,d){
   const quick=NAV.filter(x=>!['dashboard','profile','company'].includes(norm(x.id))).slice(0,6);
   return `<div class="metrics">${m.map(x=>metric(...x)).join('')}</div><div class="section"><div class="cards">${quick.map(x=>`<a class="card" href="/${x.id}.html"><strong>${esc(x.label)}</strong><span>Open ${esc(x.label.toLowerCase())}.</span></a>`).join('')}</div></div>`;
 }
-function profileView(d){const x=d.employee||d.employer||{};return `<div class="metrics">${metric('Name',x.legal_name||[x.first_name,x.last_name].filter(Boolean).join(' ')||'—')}${metric('Email',x.email||x.primary_contact_email||'—')}${metric('Phone',x.mobile||x.phone||'—')}${metric('Status',pretty(x.employment_status||x.status||'—'))}</div>`}
+function profileView(d){const x=d.employee||d.employer||{};return `<div class="metrics profile-metrics">${metric('Name',x.legal_name||[x.first_name,x.last_name].filter(Boolean).join(' ')||'—')}${metric('Email',x.email||x.primary_contact_email||'—')}${metric('Phone',x.mobile||x.phone||'—')}${metric('Status',pretty(x.employment_status||x.status||'—'))}</div>`}
 function pickManagementRows(p,d){
   if(C.kind==='ctpa'){
     if(p==='employers')return[d.employers||[],'employers'];
@@ -226,9 +234,16 @@ function wireManagementActions(p,d,ctx){
   if(p==='people')addAction(C.surface==='dot'?'Add Driver / Employee':'Add Employee',()=>{
     const fields=[];
     if(C.kind==='ctpa')fields.push({name:'employer_id',label:'Client Employer',type:'select',required:true,options:(d.employers||[]).map(x=>({value:x.id,label:x.legal_name||x.dba_name||x.id}))});
-    fields.push({name:'first_name',label:'First name',required:true},{name:'last_name',label:'Last name',required:true},{name:'employee_number',label:'Employee number'},{name:'email',label:'Email',type:'email'},{name:'job_title',label:'Job title'});
+    fields.push(
+      {name:'first_name',label:'First name',required:true},{name:'middle_name',label:'Middle name'},{name:'last_name',label:'Last name',required:true},
+      {name:'employee_number',label:'Employee / driver number'},{name:'date_of_birth',label:'Date of birth',type:'date'},{name:'hire_date',label:'Hire date',type:'date'},
+      {name:'email',label:'Email',type:'email'},{name:'mobile',label:'Mobile phone',type:'tel'},{name:'job_title',label:'Job title'},
+      {name:'address_line1',label:'Address line 1',full:true},{name:'address_line2',label:'Address line 2',full:true},{name:'city',label:'City'},{name:'state',label:'State'},{name:'postal_code',label:'ZIP / postal code'},{name:'country',label:'Country',value:'US'},
+      {name:'cdl_number',label:'CDL number'},{name:'cdl_state',label:'CDL state'},{name:'employment_status',label:'Employment status',type:'select',value:'active',options:['active','leave','inactive'].map(x=>({value:x,label:pretty(x)}))}
+    );
+    if((d.locations||[]).length)fields.push({name:'location_id',label:'Work location',type:'select',options:[{value:'',label:'No location assigned'},...(d.locations||[]).map(x=>({value:x.id,label:x.name||x.id}))]});
     if(C.surface==='dot')fields.push({name:'dot_agency',label:'DOT Agency',type:'select',value:'FMCSA',options:['FMCSA','FAA','FRA','FTA','PHMSA','USCG'].map(x=>({value:x,label:x}))});
-    modal('Add Employee',fields,async v=>{
+    modal('Add Driver / Employee',fields,async v=>{
       if(C.kind==='ctpa')return invoke('workforce-ctpa-employees-programs',{action:'save_employee',employee:{...v,dot_covered:C.surface==='dot',employment_status:'active',safety_sensitive:C.surface==='dot'}});
       return invoke('workforce-employer-management',{action:'save_employee',employee:{...v,dot_covered:C.surface==='dot',employment_status:'active',safety_sensitive:C.surface==='dot'}});
     });
@@ -268,6 +283,22 @@ function wireManagementActions(p,d,ctx){
   });
 }
 
+function sponsoredServiceRequestModal(d,service){
+  const seller=d?.seller?.legal_name||'Your C/TPA',employees=d?.employees||[],employer=d?.employer||{};
+  const fields=[
+    {name:'employee_id',label:'Driver / employee',type:'select',options:[{value:'',label:'Company-level request'},...employees.map(x=>({value:x.id,label:[x.first_name,x.middle_name,x.last_name].filter(Boolean).join(' ')||x.employee_number||x.id}))]},
+    {name:'contact_name',label:'Contact name',required:true,value:employer.primary_contact_name||''},
+    {name:'contact_email',label:'Contact email',type:'email',required:true,value:employer.primary_contact_email||''},
+    {name:'contact_phone',label:'Contact phone',type:'tel',value:employer.phone||''},
+    {name:'requested_date',label:'Preferred date',type:'date'},
+    {name:'notes',label:'Request details',type:'textarea',full:true}
+  ];
+  modal(`Request ${service.name}`,fields,async v=>{
+    const out=await invoke('workforce-employer-management',{action:'order_ctpa_service',service_id:service.id,...v});
+    alert(`Service request ${out.order?.order_number||''} was sent to ${seller}.`);
+  });
+}
+function bindSponsoredServices(d){document.querySelectorAll('[data-ctpa-service]').forEach(b=>b.onclick=()=>{const service=(d.services||[]).find(x=>String(x.id)===String(b.dataset.ctpaService));if(service)sponsoredServiceRequestModal(d,service)})}
 async function render(ctx){
   $('#actions').innerHTML='';const p=page();let d;
   if(C.kind==='self')d=await selfData();else if(C.kind==='ctpa')d=await ctpaData(p);else d=dotScoped(await employerData(p));
@@ -278,9 +309,15 @@ async function render(ctx){
   if(p==='dashboard')html=dashboard(ctx,d);
   else if(p==='pools'&&window.PortalPools){setSubtitle(C.kind==='ctpa'?'Create consortium pools and manage eligible pool membership.':'Manage random pools and pool participation for this Employer.');html=window.PortalPools.render(d,ctx);}
   else if(p==='order-services'){
-    const cat=await serviceCatalog();
-    const cards=(cat.services||[]).map(s=>{const href=(cat.seller?.checkout_base||'https://screenings4u.com/')+String(s.order_url||'');return `<article class="service"><h3>${esc(s.name)}</h3><p>${esc(s.description||s.category||'DOT service')}</p><div class="price">${s.amount==null?'Request quote':money(s.amount)}</div><div class="seller">Seller: ${esc(s.seller_legal_name||'screenings4u, LLC')}</div><a class="btn primary" href="${esc(href)}" target="_blank" rel="noopener">Order from screenings4u</a></article>`}).join('');
-    html=`<div class="notice">Services on this page are sold by <strong>screenings4u, LLC</strong>. This portal remains the compliance-management system.</div><div class="section service-grid">${cards}</div>`;
+    if(isSponsored(ctx)){
+      const seller=d?.seller?.legal_name||'Your C/TPA',cards=(d.services||[]).map(s=>`<article class="service"><span class="service-source">Available from ${esc(seller)}</span><h3>${esc(s.name)}</h3><p>${esc(s.description||s.category||'DOT service')}</p><div class="service-meta">${esc(s.category||'DOT Service')}</div><button class="btn primary" type="button" data-ctpa-service="${esc(s.id)}">Request from ${esc(seller)}</button></article>`).join('');
+      setSubtitle(`Request DOT services directly from ${seller}.`);
+      html=`<div class="notice ctpa-service-notice"><strong>${esc(seller)} is your service provider.</strong> Available services are controlled for the C/TPA network and requests from this page are sent directly to your sponsoring C/TPA.</div><div class="section service-grid">${cards||'<div class="panel service-empty"><div class="empty">No services are currently available from your C/TPA.</div></div>'}</div>`;
+    }else{
+      const cat=await serviceCatalog();
+      const cards=(cat.services||[]).map(s=>{const href=(cat.seller?.checkout_base||'https://screenings4u.com/')+String(s.order_url||'');return `<article class="service"><h3>${esc(s.name)}</h3><p>${esc(s.description||s.category||'DOT service')}</p><div class="price">${s.amount==null?'Request quote':money(s.amount)}</div><div class="seller">Seller: ${esc(s.seller_legal_name||'screenings4u, LLC')}</div><a class="btn primary" href="${esc(href)}" target="_blank" rel="noopener">Order from screenings4u</a></article>`}).join('');
+      html=`<div class="notice">Services on this page are sold by <strong>screenings4u, LLC</strong>.</div><div class="section service-grid">${cards}</div>`;
+    }
   }
   else if(C.kind==='self'){
     if(p==='profile')html=profileView(d);
@@ -321,10 +358,24 @@ async function render(ctx){
   if(p==='support'&&window.EmployerSupport)window.EmployerSupport.bind(d,ctx);
   if(p==='billing'&&window.EmployerBilling)window.EmployerBilling.bind(d,ctx);
   if(p==='branding'&&window.EmployerBranding)window.EmployerBranding.bind(d,ctx);
+  if(p==='order-services'&&isSponsored(ctx))bindSponsoredServices(d);
 }
 
 async function init(){
-  try{const s=await getSession();if(!s){location.replace('/login.html');return}const ctx=await access();if(ctx.requires_workspace_selection){location.replace('/workspace.html');return}if(!ctx.has_access)throw new Error(ctx.reason||'Portal access denied.');if(ctx.portal_code!==C.portalCode||ctx.business_surface!=='dot'||ctx.membership?.organization_type!=='employer')throw new Error('This account is not authorized for the DOT Employer portal.');if(ctx.subscription?.plan_code&&!String(ctx.subscription.plan_code).startsWith('dot_employer_'))throw new Error('This subscription is not a DOT Employer plan.');saveMid(ctx.membership?.id);window.portalCtx=ctx;shell(ctx);await loadBranding(ctx);document.body.classList.remove('loading');await render(ctx)}
+  try{
+    const s=await getSession();if(!s){location.replace('/login.html');return}
+    const startingMid=stored(),startingCache=readBrandCache(startingMid);if(startingCache?.branding)primeBranding(startingCache.branding);
+    const prefetchedBrand=startingMid?fetchBranding().catch(e=>{console.warn('Branding prefetch unavailable',e);return null}):null;
+    const ctx=await access();if(ctx.requires_workspace_selection){location.replace('/workspace.html');return}if(!ctx.has_access)throw new Error(ctx.reason||'Portal access denied.');if(ctx.portal_code!==C.portalCode||ctx.business_surface!=='dot'||ctx.membership?.organization_type!=='employer')throw new Error('This account is not authorized for the DOT Employer portal.');if(ctx.subscription?.plan_code&&!String(ctx.subscription.plan_code).startsWith('dot_employer_'))throw new Error('This subscription is not a DOT Employer plan.');
+    saveMid(ctx.membership?.id);window.portalCtx=ctx;
+    const cache=readBrandCache(ctx.membership?.id);if(cache?.branding)primeBranding(cache.branding);
+    shell(ctx);
+    if(cache){if(cache.branding)applyBranding(cache.branding,ctx);else applyPlatformBranding(ctx);setBrandLogo(cache.branding?.logo_path||'/assets/img/logo.png',cache.branding?.portal_name||ctx?.subscription?.plan_name||C.label);document.body.classList.remove('loading')}
+    const renderPromise=render(ctx);
+    const brandPromise=loadBranding(ctx,startingMid===ctx.membership?.id?prefetchedBrand:null);
+    if(!cache){await brandPromise;document.body.classList.remove('loading')}else brandPromise.catch(()=>{});
+    await renderPromise;
+  }
   catch(e){if(e.status===401||e.message==='AUTH_REQUIRED'){await sb.auth.signOut();location.replace('/login.html');return}document.body.className='login-page';document.body.innerHTML=`<main class="login-card"><img class="login-logo" src="/assets/img/logo.png"><h1>Portal unavailable</h1><p>${esc(e.message||String(e))}</p><a class="btn primary" href="/login.html">Return to login</a></main>`}
 }
 window.Portal={invoke,sb,refresh:()=>render(window.portalCtx)};
