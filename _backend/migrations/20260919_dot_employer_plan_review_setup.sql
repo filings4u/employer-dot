@@ -1,0 +1,4 @@
+-- Applied to Supabase project wyezpseboxbmkedvbmyx on 2026-09-19.
+-- Converts the current Employer plans to DOT-specific plans in place and creates
+-- review workspaces for aerving1@gmail.com for Essential, Professional, and Enterprise.
+-- See live database migration: normalize_dot_employer_plans_and_review_workspaces_v2.
